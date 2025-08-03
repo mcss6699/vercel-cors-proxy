@@ -1,4 +1,13 @@
 export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -6,28 +15,27 @@ export default async function handler(req, res) {
   const { target, ...queryParams } = req.query;
 
   if (!target) {
-    return res.status(400).json({ error: 'Missing "target" parameter. Use ?target=https://example.com&param1=value1' });
+    return res.status(400).json({ error: 'Missing "target" parameter' });
   }
 
   let targetUrl;
   try {
     targetUrl = new URL(target);
+    Object.entries(queryParams).forEach(([key, value]) => {
+      if (key !== 'target') {
+        targetUrl.searchParams.append(key, value);
+      }
+    });
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid "target" URL' });
+    return res.status(400).json({ error: 'Invalid target URL' });
   }
-
-  Object.entries(queryParams).forEach(([key, value]) => {
-    if (key !== 'target') {
-      targetUrl.searchParams.append(key, value);
-    }
-  });
 
   try {
     const response = await fetch(targetUrl.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; GitHub-Pages-CORS-Proxy)',
-        'Accept': 'application/json',
       },
+      redirect: 'follow'
     });
 
     const contentType = response.headers.get('content-type');
@@ -41,18 +49,16 @@ export default async function handler(req, res) {
       });
     }
 
-    if (contentType?.includes('application/json')) {
-      const data = await response.json();
-      res.status(200).json(data);
-    } else {
-      const text = await response.text();
-      res.status(200).send(text);
-    }
+    const data = await response.text();
+    const finalContentType = response.headers.get('content-type') || 'application/json';
+    res.setHeader('Content-Type', finalContentType);
+    res.status(200).send(data);
+
   } catch (error) {
     console.error('Proxy error:', error);
-    res.status(500).json({
-      error: 'Fetch failed',
-      message: error.message,
+    res.status(500).json({ 
+      error: 'Fetch failed', 
+      message: error.message 
     });
   }
 }
