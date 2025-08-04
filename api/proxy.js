@@ -1,15 +1,19 @@
-export default async function handler(req, res) {
+function setCORSHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Max-Age', '86400');
+  // res.setHeader('Access-Control-Max-Age', '86400');
+}
 
+export default async function handler(req, res) {
+  setCORSHeaders(res);
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-  if (req.method !== 'GET') {
+  if (req.method !== 'GET') {-
+    setCORSHeaders(res);
     res.status(405).json({ error: 'Method not allowed. Only GET is supported.' });
     return;
   }
@@ -17,6 +21,7 @@ export default async function handler(req, res) {
   const { target, ...queryParams } = req.query;
 
   if (!target) {
+    setCORSHeaders(res);
     res.status(400).json({ error: 'Missing required "target" parameter.' });
     return;
   }
@@ -30,6 +35,7 @@ export default async function handler(req, res) {
       }
     });
   } catch (e) {
+    setCORSHeaders(res);
     res.status(400).json({ error: 'Invalid "target" URL provided.' });
     return;
   }
@@ -46,6 +52,7 @@ export default async function handler(req, res) {
     const status = response.status;
     const targetContentType = response.headers.get('content-type') || 'application/octet-stream';
 
+    setCORSHeaders(res);
     res.setHeader('Content-Type', targetContentType);
 
     if (!response.ok) {
@@ -61,6 +68,7 @@ export default async function handler(req, res) {
         errorData = { message: `Upstream API error (status ${status}) and failed to parse response body.` };
       }
 
+      setCORSHeaders(res);
       res.status(status).json({
         error: `Upstream API responded with status ${status}`,
         details: errorData
@@ -69,6 +77,8 @@ export default async function handler(req, res) {
     }
 
     const data = await response.text();
+
+    setCORSHeaders(res);
 
     if (targetContentType && targetContentType.includes('application/json')) {
        try {
@@ -84,6 +94,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Proxy Error:', error);
+    setCORSHeaders(res);
     res.status(500).json({
       error: 'Internal Server Error in Proxy',
       message: error.message || 'An unexpected error occurred while fetching from the target API.'
