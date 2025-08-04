@@ -2,6 +2,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -9,13 +10,15 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed. Only GET is supported.' });
+    return;
   }
 
   const { target, ...queryParams } = req.query;
 
   if (!target) {
-    return res.status(400).json({ error: 'Missing "target" parameter' });
+    res.status(400).json({ error: 'Missing required "target" parameter.' });
+    return;
   }
 
   let targetUrl;
@@ -27,38 +30,63 @@ export default async function handler(req, res) {
       }
     });
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid target URL' });
+    res.status(400).json({ error: 'Invalid "target" URL provided.' });
+    return;
   }
 
   try {
     const response = await fetch(targetUrl.toString(), {
+      method: req.method,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; GitHub-Pages-CORS-Proxy)',
+        'User-Agent': 'Mozilla/5.0 (compatible; Vercel-CORS-Proxy)',
       },
-      redirect: 'follow'
+      redirect: 'follow',
     });
 
-    const contentType = response.headers.get('content-type');
     const status = response.status;
+    const targetContentType = response.headers.get('content-type') || 'application/octet-stream';
+
+    res.setHeader('Content-Type', targetContentType);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      return res.status(status).json({
-        error: `Upstream failed with ${status}`,
-        message: errorText || 'Unknown error',
+      let errorData;
+      try {
+        if (targetContentType && targetContentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          const errorText = await response.text();
+          errorData = { message: errorText };
+        }
+      } catch (parseError) {
+        errorData = { message: `Upstream API error (status ${status}) and failed to parse response body.` };
+      }
+
+      res.status(status).json({
+        error: `Upstream API responded with status ${status}`,
+        details: errorData
       });
+      return;
     }
 
     const data = await response.text();
-    const finalContentType = response.headers.get('content-type') || 'application/json';
-    res.setHeader('Content-Type', finalContentType);
-    res.status(200).send(data);
+
+    if (targetContentType && targetContentType.includes('application/json')) {
+       try {
+         const jsonData = JSON.parse(data);
+         res.status(status).json(jsonData);
+       } catch (parseError) {
+         console.warn("Upstream claimed JSON but response was not valid JSON:", data.substring(0, 100));
+         res.status(status).send(data);
+       }
+    } else {
+      res.status(status).send(data);
+    }
 
   } catch (error) {
-    console.error('Proxy error:', error);
-    res.status(500).json({ 
-      error: 'Fetch failed', 
-      message: error.message 
+    console.error('Proxy Error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error in Proxy',
+      message: error.message || 'An unexpected error occurred while fetching from the target API.'
     });
   }
 }
@@ -66,6 +94,6 @@ export default async function handler(req, res) {
 export const config = {
   api: {
     externalResolver: true,
-    bodyParser: false,
+    bodyParser: false
   },
 };
