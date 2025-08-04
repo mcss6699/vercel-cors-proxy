@@ -2,17 +2,23 @@ function setCORSHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  // res.setHeader('Access-Control-Max-Age', '86400');
+}
+
+function setNoCacheHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 }
 
 export default async function handler(req, res) {
+  setNoCacheHeaders(res);
   setCORSHeaders(res);
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-  if (req.method !== 'GET') {-
+  if (req.method !== 'GET') {
     setCORSHeaders(res);
     res.status(405).json({ error: 'Method not allowed. Only GET is supported.' });
     return;
@@ -53,6 +59,7 @@ export default async function handler(req, res) {
     const targetContentType = response.headers.get('content-type') || 'application/octet-stream';
 
     setCORSHeaders(res);
+    setNoCacheHeaders(res);
     res.setHeader('Content-Type', targetContentType);
 
     if (!response.ok) {
@@ -69,6 +76,7 @@ export default async function handler(req, res) {
       }
 
       setCORSHeaders(res);
+      setNoCacheHeaders(res);
       res.status(status).json({
         error: `Upstream API responded with status ${status}`,
         details: errorData
@@ -77,8 +85,8 @@ export default async function handler(req, res) {
     }
 
     const data = await response.text();
-
     setCORSHeaders(res);
+    setNoCacheHeaders(res);
 
     if (targetContentType && targetContentType.includes('application/json')) {
        try {
@@ -95,6 +103,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Proxy Error:', error);
     setCORSHeaders(res);
+    setNoCacheHeaders(res);
     res.status(500).json({
       error: 'Internal Server Error in Proxy',
       message: error.message || 'An unexpected error occurred while fetching from the target API.'
